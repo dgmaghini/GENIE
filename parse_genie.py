@@ -5,6 +5,7 @@ Generate sample by gene matrix for downstream analysis
 """
 
 import sys
+import argparse
 import synapseclient
 import re
 
@@ -44,18 +45,19 @@ def make_panel_dictionary(input_file):
 
 
 # open clinical sample sheet, pull out sample ids and assays for luad
-def find_tumor_ids(input_file):
+def find_tumor_ids(input_file, cancers):
     """
     Parse out sample IDs and assays for all lung adenocarcinoma tumors
 
     Parameters:
     input_file (str): Path to file with sample metadata
+    cancers (list): A list of oncotree codes for cancer types
 
     Returns:
     dict: Dictionary mapping lung adeno sample IDs to sample panel
 
     """
-    luad_tumors = {}
+    tumors = {}
     with open(input_file, 'r') as f:
         header = f.readline()+f.readline()+f.readline()+f.readline()+\
                 f.readline()
@@ -67,12 +69,12 @@ def find_tumor_ids(input_file):
             sample_id = split[1]
             oncotree_code = split[3]
             seq_assay_id = split[5]
-            if oncotree_code == 'LUAD':
-                luad_tumors[sample_id] = seq_assay_id
+            if oncotree_code in cancers:
+                tumors[sample_id] = seq_assay_id
             line = f.readline()
-    return luad_tumors
+    return tumors
 
-def pull_sample_mutations(input_file, luad_tumors):
+def pull_sample_mutations(input_file, tumors):
     """
     Parse out lung adenocarcinoma samples and mutations from mutation file
 
@@ -83,7 +85,7 @@ def pull_sample_mutations(input_file, luad_tumors):
 
     Parameters:
     input_file (str): Path to file of mutation data
-    luad_tumors (dict): dictionary mapping sample IDs to assay IDs
+    tumors (dict): dictionary mapping sample IDs to assay IDs
 
     Returns:
     dict: Dictionary mapping LUAD sample IDs to lists of mutation data
@@ -126,7 +128,7 @@ def pull_sample_mutations(input_file, luad_tumors):
                                                symbol, hgnc_id, swissprot, \
                                                polyphen, variant_class])
             # if sample ID has not already been added, add sample and mutation
-            elif sample_id in luad_tumors:
+            elif sample_id in tumors:
                 sample_data[sample_id] = [[hugo_symbol, entrez_gene, chrom, \
                                            start, stop, strand, classification,\
                                            variant_type, hgvsc, hgvsp, gene, \
@@ -209,7 +211,7 @@ def make_panel_to_muts(panels, mutations):
                     panel_to_muts[panel][i] = True
     return panel_to_muts
 
-def make_tumor_mutations(sample_data, mutations, panel_to_muts, luad_tumors):
+def make_tumor_mutations(sample_data, mutations, panel_to_muts, tumors):
     """
     Constructs dictionary mapping mutation presences for each sample
 
@@ -222,7 +224,7 @@ def make_tumor_mutations(sample_data, mutations, panel_to_muts, luad_tumors):
     sample_data (dict): mapping sample IDs to lists of mutation data
     mutations (list): all mutations included in dataset
     panel_to_muts (dict): mapping panels to mutations screened by panel
-    luad_tumors (dict): mapping sample IDs to sample assays
+    tumors (dict): mapping sample IDs to sample assays
 
     Returns:
     dict: mapping sample IDs to integers representing presence of mutations
@@ -248,7 +250,7 @@ def make_tumor_mutations(sample_data, mutations, panel_to_muts, luad_tumors):
                 tumor_mutations[sample_id][mutations.index(codonsymbol)] = 1
 
         # check against panel for not screened vs not mutated
-        panel_mutations = panel_to_muts[luad_tumors[sample_id]]
+        panel_mutations = panel_to_muts[tumors[sample_id]]
         for i, val in enumerate(tumor_mutations[sample_id]):
             if val == -1:
                 if panel_mutations[i]==True:
@@ -257,26 +259,39 @@ def make_tumor_mutations(sample_data, mutations, panel_to_muts, luad_tumors):
 
 
 def main():
-    username = sys.argv[1]
-    password = sys.argv[2]
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("-u", "--username", dest = "username",  \
+                        help="User name", required=True)
+    parser.add_argument("-p", "--password", dest = "password", help="Password",\
+                        required=True)
+    parser.add_argument("-c", "--cancer", nargs = "*", type = str, \
+                        dest = "cancers", help="Cancer Types", \
+                        required=True)
+
+    args = parser.parse_args()
+    for i, cancer in enumerate(args.cancers):
+        args.cancers[i] = cancer.strip().upper()
 
     # use the synapse client to download relevant files
     syn = synapseclient.Synapse()
-    syn.login(username, password)
+    syn.login(args.username, args.password)
     combinedbed = syn.get('syn13251251')
     mutationsextended = syn.get('syn13251247')
     clinicalpatient = syn.get('syn13251229')
 
     # parse all files and extract relevant information
     panels = make_panel_dictionary(combinedbed.path) # panel to gene
-    luad_tumors = find_tumor_ids(clinicalpatient.path) # sample to panel
-    sample_data = pull_sample_mutations(mutationsextended.path, luad_tumors)
+    tumors = find_tumor_ids(clinicalpatient.path, args.cancers)
+    sample_data = pull_sample_mutations(mutationsextended.path, tumors)
     mutations = make_mutations_list(sample_data) # find all mutations
     panel_to_muts = make_panel_to_muts(panels, mutations) # panel to mutation
     tumor_mutations = make_tumor_mutations(sample_data, mutations, \
-                                            panel_to_muts, luad_tumors)
+                                            panel_to_muts, tumors)
+
     # parse dict containing all mutations for each tumor, output to tsv
-    with open("complete_mutations_table.txt", "w") as output:
+    outname = "complete_mutations_table_%s.txt" % "_".join(args.cancers)
+    with open(outname, "w") as output:
         output.write("\t".join(["Sample"] + mutations)+"\n")
         for i in tumor_mutations:
             output.write("\t".join([i]+list(map(str, tumor_mutations[i])))+"\n")
