@@ -7,9 +7,11 @@ For parsing out mutation data from the GENIE database
 * Python 3.6
 * synapseclient
 * pysftp
-* an account at Synapse.org. 
+* an account at [Synapse.org](https://www.synapse.org/)
 
 ### Installing
+* synapseclient is easiest installed with [conda](https://anaconda.org/bioconda/synapseclient) or can be installed with `pip install synapseclient`
+* parse_genie.py and mutation_counting.py can be downloaded and run using Python3
 
 ### Running
 
@@ -22,7 +24,7 @@ Run `mutation_counting.py` with:
 `python3 mutation_counting.py path/to/complete_mutations*.txt path/to/listofgenes.txt output_name.txt -g1 background_gene1 -g2 background_gene2`
 
 ### Authors
-Dylan Maghini, [view LinkedIn](https://www.linkedin.com/in/dylan-maghini-110139101/)
+Dylan Maghini, [(view LinkedIn)](https://www.linkedin.com/in/dylan-maghini-110139101/)
 
 ### Acknowledgments
 
