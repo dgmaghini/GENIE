@@ -3,9 +3,11 @@ Author: Dylan Maghini
 Date: March 17, 2019
 Take in list of genes, count combinatorial mutation presence
 """
-import sys
 
-def make_genes_dict(input_file, gene_list, gene2, gene3):
+import sys
+import argparse
+
+def make_genes_dict_triples(input_file, gene_list, gene2, gene3):
     """
     Maps genes of interest to lists of mutation counts
 
@@ -80,27 +82,132 @@ def make_genes_dict(input_file, gene_list, gene2, gene3):
                                genes_dict[(geneA,geneB,geneC)][0] += 1
     return genes_dict
 
+def make_genes_dict_doubles(input_file, gene_list, gene2):
+    """
+    Maps genes of interest to lists of mutation counts
+
+    This function constructs a dictionary mapping (gene1, gene2) to a
+    list of integers, where indices 0-3 represent the number of samples that are
+    wt/wt, wt/mut, mut/wt, mut/mut for gene 1 (gene of interest) and gene2
+    (background gene 1).
+
+    Parameters:
+    input_file (str): Path to input file
+    gene_list (list): List of genes to check in mutation table
+    gene2 (str): Name of background gene
+
+    Returns:
+    dict: mapping gene name to list of integers representing mutation types
+
+    """
+    genes_dict = {}
+    gene_to_ind = {}
+    with open(input_file, "r") as f:
+        mutations = f.readline().strip().split("\t")[1:]
+        gene_to_ind[gene2] = mutations.index(gene2)
+        for gene in gene_list:
+            if gene in mutations and gene2 in mutations:
+                genes_dict[(gene, gene2)] = [0,0,0,0]
+            if gene in mutations:
+                gene_to_ind[gene] = mutations.index(gene)
+
+        for line in f:
+            values = line.strip().split("\t")[1:]
+            values = list(map(int, values))
+            for (geneA, geneB) in genes_dict:
+                if values[gene_to_ind[geneA]] != -1 and \
+                   values[gene_to_ind[geneB]] != -1: # if were screened
+                    if values[gene_to_ind[geneA]] == 1:
+                        if values[gene_to_ind[geneB]] == 1:
+                            genes_dict[(geneA, geneB)][3] += 1
+                        else:
+                            genes_dict[(geneA, geneB)][2] += 1
+                    else:
+                        if values[gene_to_ind[geneB]] == 1:
+                            genes_dict[(geneA, geneB)][1] += 1
+                        else:
+                            genes_dict[(geneA, geneB)][0] += 1
+    return genes_dict
+
+def make_genes_dict_singles(input_file, gene_list):
+    """
+    Maps genes of interest to lists of mutation counts
+
+    This function constructs a dictionary mapping gene1 to a list of integers,
+    where indices 0-1 represent the number of samples that are wt or mut,
+    respectively for gene 1 (gene of interest).
+
+    Parameters:
+    input_file (str): Path to input file
+    gene_list (list): List of genes to check in mutation table
+
+    Returns:
+    dict: mapping gene name to list of integers representing mutation types
+
+    """
+    genes_dict = {}
+    gene_to_ind = {}
+    with open(input_file, "r") as f:
+        mutations = f.readline().strip().split("\t")[1:]
+        for gene in gene_list:
+            if gene in mutations:
+                genes_dict[gene] = [0,0] #wt, mut
+                gene_to_ind[gene] = mutations.index(gene)
+        for line in f:
+            values = line.strip().split("\t")[1:]
+            values = list(map(int, values))
+            for gene in genes_dict:
+                if values[gene_to_ind[gene]] != -1:
+                    if values[gene_to_ind[gene]] == 1:
+                        genes_dict[gene][1] += 1
+                    else:
+                        genes_dict[gene][0] += 1
+    return genes_dict
+
 def main():
     # take in inputs from user
-    input_file = sys.argv[1]
-    input_genes = sys.argv[2] # file with one input gene per line
-    gene2 = sys.argv[3] # background gene 1
-    gene3 = sys.argv[4] # background gene 2
-    output_name = sys.argv[5]
+    parser = argparse.ArgumentParser()
+    parser.add_argument("input_file", help="Mutation table file name")
+    parser.add_argument("input_genes", help="File containing list of genes")
+    parser.add_argument("output_name", help="Output file name")
+    parser.add_argument("-g1", type = str, dest = "gene2", \
+                        help="Second gene of interest")
+    parser.add_argument("-g2", type = str, dest = "gene3", \
+                        help="Second gene of interest")
+    args = parser.parse_args()
 
     # parse through input genes file and add all to list
     gene_list = []
-    with open(input_genes, "r") as f:
+    with open(args.input_genes, "r") as f:
         for line in f:
             gene_list.append(line.strip().upper())
 
-    genes_dict = make_genes_dict(input_file, gene_list, gene2, gene3)
+    if args.gene2:
+        if args.gene3:
+            genes_dict = make_genes_dict_triples(args.input_file, gene_list, \
+            args.gene2, args.gene3)
+            header = "\t".join(["gene1", "gene2", "gene3", "wt/wt/wt", \
+                        "wt/wt/-", "wt/-/wt", "wt/-/-", "-/wt/wt", "-/wt/-", \
+                        "-/-/wt", "-/-/-"])
+        else:
+            genes_dict = make_genes_dict_doubles(args.input_file, gene_list, \
+                                    args.gene2)
+            header = "\t".join(["gene1", "gene2", "wt/wt", "wt/-", "-/wt", \
+                                    "-/-"])
+    else:
+        genes_dict = make_genes_dict_singles(args.input_file, gene_list)
+        header = "\t".join(["gene1", "wt", "-"])
 
     # iterate through all genes of interest, output dictionary contents to file
-    with open(output_name, "w") as output:
-        for (geneA, geneB, geneC) in genes_dict:
-            vals = "\t".join(list(map(str, genes_dict[(geneA, geneB, geneC)])))
-            output.write(geneA+"\t"+geneB+"\t"+geneC+"\t"+vals+"\n")
+    with open(args.output_name, "w") as output:
+        output.write(header + "\n")
+        for item in genes_dict:
+            if args.gene2:
+                gene_names = "\t".join(item)
+            else:
+                gene_names = item
+            vals = "\t".join(list(map(str, genes_dict[item])))
+            output.write(gene_names +"\t"+vals+"\n")
 
 if __name__ == "__main__":
     main()
