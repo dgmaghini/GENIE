@@ -17,11 +17,15 @@ These scripts parse version 4 of the GENIE database. Users input a set of oncotr
 
 `parse_genie.py` requires a log in to the Synapse database. 
 Run `parse_genie.py` with:
-`python3 parse_genie.py -u <synapse_username> -p <synapse_password> -c <oncotree code 1> <oncotree code 2> ...`
+```python
+python3 parse_genie.py -u <synapse_username> -p <synapse_password> -c <oncotree code 1> <oncotree code 2> ...
+```
 
 `mutation_counting.py` 
 Run `mutation_counting.py` with:
-`python3 mutation_counting.py path/to/complete_mutations*.txt path/to/listofgenes.txt output_name.txt -g1 background_gene1 -g2 background_gene2`
+```python
+python3 mutation_counting.py path/to/complete_mutations*.txt path/to/listofgenes.txt output_name.txt -g1 background_gene1 -g2 background_gene2
+```
 
 ### Authors
 Dylan Maghini, [(view LinkedIn)](https://www.linkedin.com/in/dylan-maghini-110139101/)
